@@ -24,9 +24,7 @@ class LocationViewModel(application: Application) : AndroidViewModel(application
         _favouriteLocations.value = repository.getFavourites()
     }
 
-    // Rename this to clarify it handles updates too
     fun addOrUpdateFavourite(id: String?, title: String, desc: String, rating: Float, location: LocationData) {
-        // If id is null, create new UUID. If id exists, keep it (Edit mode).
         val newFav = FavouriteLocation(
             id = id ?: java.util.UUID.randomUUID().toString(),
             title = title,
