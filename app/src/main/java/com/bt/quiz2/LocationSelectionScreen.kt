@@ -1,11 +1,17 @@
 package com.bt.quiz2
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.bt.quiz2.models.FavouriteLocation
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
@@ -14,12 +20,50 @@ import com.google.maps.android.compose.*
 fun LocationSelectionScreen(
     viewModel: LocationViewModel
 ) {
+    val context = LocalContext.current
     val favouriteLocations = viewModel.favouriteLocations.value
-    var showDialog by remember { mutableStateOf(false) }
-    var clickedLocation by remember { mutableStateOf<LatLng?>(null) }
+    val userLocation by viewModel.userLocation // Get the live user location
 
+    // --- State for Add/Edit logic ---
+    var locationToEdit by remember { mutableStateOf<FavouriteLocation?>(null) }
+    var newLocationLatLng by remember { mutableStateOf<LatLng?>(null) }
+    val showDialog = locationToEdit != null || newLocationLatLng != null
+
+    // --- Map State ---
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(43.65, -79.38), 10f)
+    }
+
+    // --- 1. Permissions & GPS Logic (DO NOT DELETE THIS) ---
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            MyLocationUtils(context).requestLocationUpdates(viewModel)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val utils = MyLocationUtils(context)
+        if (utils.hasLocationPermission(context)) {
+            utils.requestLocationUpdates(viewModel)
+        } else {
+            permissionLauncher.launch(arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ))
+        }
+    }
+
+    // Center camera when user location is found
+    LaunchedEffect(userLocation) {
+        userLocation?.let {
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 15f)
+            )
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -27,43 +71,57 @@ fun LocationSelectionScreen(
             modifier = Modifier.weight(1f),
             cameraPositionState = cameraPositionState,
             onMapClick = { latLng ->
-                clickedLocation = latLng
-                showDialog = true
+                locationToEdit = null // Not editing
+                newLocationLatLng = latLng // Add mode
             }
         ) {
+            // Show all saved favourites
             favouriteLocations.forEach { fav ->
                 Marker(
                     state = MarkerState(position = LatLng(fav.latitude, fav.longitude)),
                     title = fav.title,
                     snippet = "${fav.rating} Stars: ${fav.description}",
-                    onClick = {
-                        // Optional: Click marker to delete?
-                        it.showInfoWindow()
-                        true
+                    onInfoWindowClick = {
+                        // INFO WINDOW CLICK = EDIT ENTRY
+                        newLocationLatLng = null
+                        locationToEdit = fav
                     }
                 )
             }
 
-            clickedLocation?.let {
-                Marker(state = MarkerState(it), alpha = 0.5f)
+            // Show temporary marker for new selection
+            newLocationLatLng?.let {
+                Marker(state = MarkerState(it), alpha = 0.5f, title = "New Location")
             }
         }
     }
 
-    // 3. The Form Dialog
-    if (showDialog && clickedLocation != null) {
+    // --- Dialog Logic ---
+    if (showDialog) {
+        val latLng = locationToEdit?.let { LatLng(it.latitude, it.longitude) } ?: newLocationLatLng!!
+
         AddLocationDialog(
-            latLng = clickedLocation!!,
-            onDismiss = { showDialog = false },
+            latLng = latLng,
+            existingLocation = locationToEdit,
+            onDismiss = {
+                locationToEdit = null
+                newLocationLatLng = null
+            },
             onSave = { title, desc, rating ->
-                viewModel.addFavourite(
-                    title,
-                    desc,
-                    rating,
-                    LocationData(clickedLocation!!.latitude, clickedLocation!!.longitude)
+                viewModel.addOrUpdateFavourite(
+                    id = locationToEdit?.id,
+                    title = title,
+                    desc = desc,
+                    rating = rating,
+                    location = LocationData(latLng.latitude, latLng.longitude)
                 )
-                showDialog = false
-                clickedLocation = null // Clear temp selection
+                locationToEdit = null
+                newLocationLatLng = null
+            },
+            onDelete = {
+                locationToEdit?.let { viewModel.deleteFavourite(it) }
+                locationToEdit = null
+                newLocationLatLng = null
             }
         )
     }
@@ -72,17 +130,22 @@ fun LocationSelectionScreen(
 @Composable
 fun AddLocationDialog(
     latLng: LatLng,
+    existingLocation: FavouriteLocation?,
     onDismiss: () -> Unit,
-    onSave: (String, String, Float) -> Unit
+    onSave: (String, String, Float) -> Unit,
+    onDelete: () -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var rating by remember { mutableStateOf("") } // Input as string for simplicity
+    var title by remember { mutableStateOf(existingLocation?.title ?: "") }
+    var description by remember { mutableStateOf(existingLocation?.description ?: "") }
+    var rating by remember { mutableStateOf(existingLocation?.rating?.toString() ?: "") }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(modifier = Modifier.padding(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Add Favourite Location", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = if (existingLocation == null) "Add Favourite" else "Edit Favourite",
+                    style = MaterialTheme.typography.titleLarge
+                )
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") })
@@ -92,9 +155,20 @@ fun AddLocationDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    if (existingLocation != null) {
+                        Button(
+                            onClick = onDelete,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Text("Delete")
+                        }
+                    }
+
                     Button(onClick = onDismiss, modifier = Modifier.padding(end = 8.dp)) {
                         Text("Cancel")
                     }
+
                     Button(onClick = {
                         val ratingFloat = rating.toFloatOrNull() ?: 0f
                         onSave(title, description, ratingFloat)

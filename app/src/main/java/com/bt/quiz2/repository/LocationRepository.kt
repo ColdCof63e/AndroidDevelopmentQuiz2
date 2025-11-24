@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlin.collections.toMutableList
 import com.bt.quiz2.models.FavouriteLocation
+import androidx.core.content.edit
 
 
 class LocationsRepository(context: Context) {
@@ -18,8 +19,13 @@ class LocationsRepository(context: Context) {
         return gson.fromJson(json, type)
     }
 
-    fun addFavourite(location: FavouriteLocation) {
+    fun addOrUpdateFavourite(location: FavouriteLocation) {
         val currentList = getFavourites().toMutableList()
+
+        // Remove any existing location with the same ID (Update logic)
+        currentList.removeAll { it.id == location.id }
+
+        // Add the new/updated version
         currentList.add(location)
         saveList(currentList)
     }
@@ -32,6 +38,6 @@ class LocationsRepository(context: Context) {
 
     private fun saveList(list: List<FavouriteLocation>) {
         val json = gson.toJson(list)
-        prefs.edit().putString(KEY, json).apply()
+        prefs.edit { putString(KEY, json) }
     }
 }
