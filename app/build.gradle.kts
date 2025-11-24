@@ -1,8 +1,21 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use {
+            load(it)
+        }
+    }
+}
+
+val MAPS_API_KEY = localProperties.getProperty("MAPS_API_KEY") ?: ""
 
 android {
     namespace = "com.bt.quiz2"

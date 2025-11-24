@@ -1,35 +1,47 @@
 package com.bt.quiz2
 
-import android.util.Log
+import android.app.Application
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.launch
+import androidx.lifecycle.AndroidViewModel
+import com.bt.quiz2.models.FavouriteLocation
+import com.bt.quiz2.repository.LocationsRepository
 
-class LocationViewModel: ViewModel() {
-    private val _location = mutableStateOf<LocationData?>(null)
-    val location: State<LocationData?> = _location
+class LocationViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val _address = mutableStateOf(listOf<GeocodingResults>())
-    val address : State<List<GeocodingResults>> = _address
+    private val repository = LocationsRepository(application)
 
-    fun updateLocation(newLocation : LocationData){
-        _location.value = newLocation
+    private val _favouriteLocations = mutableStateOf<List<FavouriteLocation>>(emptyList())
+    val favouriteLocations: State<List<FavouriteLocation>> = _favouriteLocations
+    private val _userLocation = mutableStateOf<LocationData?>(null)
+    val userLocation: State<LocationData?> = _userLocation
+
+    init {
+        loadFavourites()
     }
 
-    fun fetchAddress(latlng:String) {
-        try {
-            viewModelScope.launch {
-                val result = RetrofitClient.create().getAddressFromCoordinates(
-                    latlng,
-                    BuildConfig.MAPS_API_KEY
-                )
-                _address.value =result.results
-                //Log.d("err1", " ${_address.value} ")
-            }
-        } catch (e:Exception){
-            Log.d("err1", " ${e.cause} ${e.message}")
-        }
+    private fun loadFavourites() {
+        _favouriteLocations.value = repository.getFavourites()
+    }
+
+    fun addFavourite(title: String, desc: String, rating: Float, location: LocationData) {
+        val newFav = FavouriteLocation(
+            title = title,
+            description = desc,
+            rating = rating,
+            latitude = location.latitude,
+            longitude = location.longitude
+        )
+        repository.addFavourite(newFav)
+        loadFavourites()
+    }
+
+    fun deleteFavourite(favLocation: FavouriteLocation) {
+        repository.deleteFavourite(favLocation)
+        loadFavourites()
+    }
+
+    fun updateLocation(newLocation: LocationData) {
+        _userLocation.value = newLocation
     }
 }
