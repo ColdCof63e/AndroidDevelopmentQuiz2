@@ -17,7 +17,6 @@ class MainActivity : ComponentActivity() {
             val viewModel: LocationViewModel = viewModel()
             Quiz2Theme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    // Pass the ViewModel to the screen
                     LocationSelectionScreen(viewModel = viewModel)
                 }
             }
