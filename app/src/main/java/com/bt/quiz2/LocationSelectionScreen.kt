@@ -24,17 +24,14 @@ fun LocationSelectionScreen(
     val favouriteLocations = viewModel.favouriteLocations.value
     val userLocation by viewModel.userLocation // Get the live user location
 
-    // --- State for Add/Edit logic ---
     var locationToEdit by remember { mutableStateOf<FavouriteLocation?>(null) }
     var newLocationLatLng by remember { mutableStateOf<LatLng?>(null) }
     val showDialog = locationToEdit != null || newLocationLatLng != null
 
-    // --- Map State ---
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(43.65, -79.38), 10f)
     }
 
-    // --- 1. Permissions & GPS Logic (DO NOT DELETE THIS) ---
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -58,45 +55,41 @@ fun LocationSelectionScreen(
     }
 
     // Center camera when user location is found
-    LaunchedEffect(userLocation) {
-        userLocation?.let {
-            cameraPositionState.animate(
-                CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 15f)
-            )
-        }
-    }
+//    LaunchedEffect(userLocation) {
+//        userLocation?.let {
+//            cameraPositionState.animate(
+//                CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 15f)
+//            )
+//        }
+//    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         GoogleMap(
             modifier = Modifier.weight(1f),
             cameraPositionState = cameraPositionState,
             onMapClick = { latLng ->
-                locationToEdit = null // Not editing
-                newLocationLatLng = latLng // Add mode
+                locationToEdit = null
+                newLocationLatLng = latLng
             }
         ) {
-            // Show all saved favourites
             favouriteLocations.forEach { fav ->
                 Marker(
                     state = MarkerState(position = LatLng(fav.latitude, fav.longitude)),
                     title = fav.title,
                     snippet = "${fav.rating} Stars: ${fav.description}",
                     onInfoWindowClick = {
-                        // INFO WINDOW CLICK = EDIT ENTRY
                         newLocationLatLng = null
                         locationToEdit = fav
                     }
                 )
             }
 
-            // Show temporary marker for new selection
             newLocationLatLng?.let {
                 Marker(state = MarkerState(it), alpha = 0.5f, title = "New Location")
             }
         }
     }
 
-    // --- Dialog Logic ---
     if (showDialog) {
         val latLng = locationToEdit?.let { LatLng(it.latitude, it.longitude) } ?: newLocationLatLng!!
 
