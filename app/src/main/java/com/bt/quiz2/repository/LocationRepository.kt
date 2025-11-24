@@ -22,10 +22,8 @@ class LocationsRepository(context: Context) {
     fun addOrUpdateFavourite(location: FavouriteLocation) {
         val currentList = getFavourites().toMutableList()
 
-        // Remove any existing location with the same ID (Update logic)
         currentList.removeAll { it.id == location.id }
 
-        // Add the new/updated version
         currentList.add(location)
         saveList(currentList)
     }
